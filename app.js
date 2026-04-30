@@ -75,8 +75,7 @@ $(function () {
         function (u) { return 'https://test.cors.workers.dev/?' + u; },
         function (u) { return 'http://alloworigin.com/get?url=' + u; },
         function (u) { return 'https://api.allorigins.win/raw?url=' + u; },
-        function (u) { return 'https://whateverorigin.org/get?url=' + encodeURIComponent(u); },
-        function (u) { return 'https://api.cors.lol/?url=' + u; },
+function (u) { return 'https://api.cors.lol/?url=' + u; },
         function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + u; },
     ];
 
