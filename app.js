@@ -33,10 +33,9 @@ $(function () {
         date:          null,
         time:          null,
         timeMatrix:    null,
-        captchaWidget: null,
-        captchaToken:  null,
-        corsProxy:     null,
-        companyBase:   null,
+        captchaWidget:  null,
+        captchaToken:   null,
+        assetBlobUrls:  null,
     };
 
     // ─── API log ─────────────────────────────────────────────────────────────
@@ -89,24 +88,47 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
         return a;
     }
 
-    // Try each CORS proxy in random order until one successfully fetches testUrl.
-    // onFound(proxyFn) — proxyFn(url) builds a proxied URL.
-    // onFail()        — all proxies exhausted.
-    function findCorsProxy(testUrl, onFound, onFail) {
+    // Fetch url via CORS proxies in random order, return as blob: URL with JS MIME type.
+    // Blob URL bypasses strict module MIME checking regardless of proxy Content-Type.
+    // onSuccess(blobUrl), onFail(msg)
+    function fetchAsJsBlob(url, onSuccess, onFail) {
         var proxies = shuffleArray(CORS_PROXIES);
         var idx = 0;
 
         function tryNext() {
-            if (idx >= proxies.length) { onFail(); return; }
-            var proxy = proxies[idx++];
-            fetch(proxy(testUrl), { mode: 'cors', cache: 'no-store' })
+            if (idx >= proxies.length) { onFail('All proxies failed for: ' + url); return; }
+            var proxied = proxies[idx++](url);
+            fetch(proxied, { mode: 'cors', cache: 'no-store' })
                 .then(function (r) {
-                    if (r.ok) { onFound(proxy); } else { tryNext(); }
+                    if (!r.ok) { tryNext(); return null; }
+                    return r.text();
+                })
+                .then(function (code) {
+                    if (code === null || code === undefined) { return; }
+                    var blob = new Blob([code], { type: 'application/javascript' });
+                    onSuccess(URL.createObjectURL(blob));
                 })
                 .catch(tryNext);
         }
 
         tryNext();
+    }
+
+    // Fetch all urls as JS blobs sequentially, call onDone([blobUrls]) when all done.
+    function fetchAllAsJsBlobs(urls, onDone, onFail) {
+        var blobUrls = [];
+        var remaining = urls.slice();
+
+        function next() {
+            if (!remaining.length) { onDone(blobUrls); return; }
+            var url = remaining.shift();
+            fetchAsJsBlob(url, function (blobUrl) {
+                blobUrls.push(blobUrl);
+                next();
+            }, onFail);
+        }
+
+        next();
     }
 
     // ─── Step 1: Connect ─────────────────────────────────────────────────────
@@ -324,10 +346,9 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
                 return;
             }
 
-            // Strip first subdomain: https://user-api.em.simplybook.ovh → https://em.simplybook.ovh
+            // Strip first subdomain: https://user-api.simplybook.me → https://simplybook.me
             var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
             var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
-            s.companyBase   = companyBase;
 
             // Collect absolute asset URLs (proxy applied later via findCorsProxy)
             var assetUrls = [];
@@ -368,18 +389,14 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
                 }
             }
 
-            function applyProxyAndLoad(proxy) {
-                s.corsProxy = proxy || null;
-                if (proxy && assetUrls.length) {
-                    challenge.assets = { js: assetUrls.map(proxy) };
-                    logApi('CORS proxy selected', { proxied: challenge.assets.js[0] });
-                }
-                loadWidget();
-            }
-
             if (assetUrls.length) {
-                findCorsProxy(assetUrls[0], applyProxyAndLoad, function () {
-                    logApi('CORS proxies', { note: 'all failed, loading without proxy' });
+                fetchAllAsJsBlobs(assetUrls, function (blobUrls) {
+                    s.assetBlobUrls = blobUrls;
+                    challenge.assets = { js: blobUrls };
+                    logApi('assets as blobs', blobUrls.length);
+                    loadWidget();
+                }, function (err) {
+                    logApi('asset fetch failed', { err: err });
                     challenge.assets = { js: assetUrls };
                     loadWidget();
                 });
@@ -486,11 +503,8 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         s.apiClient.getCaptchaChallenge(function (challenge) {
             if (challenge && challenge.provider) {
-                if (s.corsProxy && s.companyBase && challenge.assets && challenge.assets.js) {
-                    challenge.assets.js = challenge.assets.js.map(function (url) {
-                        var abs = url.charAt(0) === '/' ? s.companyBase + url : url;
-                        return s.corsProxy(abs);
-                    });
+                if (s.assetBlobUrls && s.assetBlobUrls.length) {
+                    challenge.assets = { js: s.assetBlobUrls };
                 }
                 s.captchaWidget.setChallenge(challenge);
             }
