@@ -198,7 +198,7 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
     $('#btn-provider').on('click', function () {
         var val = $('#sel-provider').val();
         if (val === '') { showAlert('Please select a provider.'); return; }
-        s.unitId = val === '0' ? null : val;
+        s.unitId = val === '0' ? -1 : val;
         loadCalendar();
     });
 
@@ -419,9 +419,11 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
                 additional,
                 1,    // qty
                 null, // batchId
-                function (result) {
-                    if (!result || result.error) {
-                        var msg = result && result.error ? result.error.message : 'Booking failed.';
+                function (result, error) {
+                    if (error || !result || result.error) {
+                        var msg = (error && error.message)
+                            || (result && result.error && result.error.message)
+                            || 'Booking failed.';
                         showAlert(msg);
                         $('#btn-book').prop('disabled', false).text('Book Now');
                         refreshCaptcha();
