@@ -220,7 +220,7 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         s.apiClient.getStartTimeMatrix(
             today, dateTo,
-            s.serviceId, s.unitId,
+            s.serviceId, s.unitId === -1 ? null : s.unitId,
             1,
             function (matrix) {
                 logApi('getStartTimeMatrix (dates)', Object.keys(matrix));
@@ -263,7 +263,7 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         s.apiClient.getStartTimeMatrix(
             date, date,
-            s.serviceId, s.unitId,
+            s.serviceId, s.unitId === -1 ? null : s.unitId,
             1,
             function (matrix) {
                 logApi('getStartTimeMatrix [' + date + ']', matrix);
