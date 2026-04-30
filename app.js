@@ -68,6 +68,47 @@ $(function () {
         $('html, body').animate({ scrollTop: top }, 250);
     }
 
+    // ─── CORS proxy helpers ───────────────────────────────────────────────────
+
+    var CORS_PROXIES = [
+        function (u) { return 'https://corsproxy.io/?url=' + u; },
+        function (u) { return 'https://test.cors.workers.dev/?' + u; },
+        function (u) { return 'http://alloworigin.com/get?url=' + u; },
+        function (u) { return 'https://api.allorigins.win/raw?url=' + u; },
+        function (u) { return 'https://whateverorigin.org/get?url=' + encodeURIComponent(u); },
+        function (u) { return 'https://api.cors.lol/?url=' + u; },
+        function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + u; },
+    ];
+
+    function shuffleArray(arr) {
+        var a = arr.slice();
+        for (var i = a.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var t = a[i]; a[i] = a[j]; a[j] = t;
+        }
+        return a;
+    }
+
+    // Try each CORS proxy in random order until one successfully fetches testUrl.
+    // onFound(proxyFn) — proxyFn(url) builds a proxied URL.
+    // onFail()        — all proxies exhausted.
+    function findCorsProxy(testUrl, onFound, onFail) {
+        var proxies = shuffleArray(CORS_PROXIES);
+        var idx = 0;
+
+        function tryNext() {
+            if (idx >= proxies.length) { onFail(); return; }
+            var proxy = proxies[idx++];
+            fetch(proxy(testUrl), { mode: 'cors', cache: 'no-store' })
+                .then(function (r) {
+                    if (r.ok) { onFound(proxy); } else { tryNext(); }
+                })
+                .catch(tryNext);
+        }
+
+        tryNext();
+    }
+
     // ─── Step 1: Connect ─────────────────────────────────────────────────────
 
     $('#btn-connect').on('click', function () {
@@ -287,12 +328,11 @@ $(function () {
             var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
             var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
 
-            // Make relative asset URLs absolute, then wrap through CORS proxy
-            var corsProxy = 'https://api.cors.lol/?url=';
+            // Collect absolute asset URLs (proxy applied later via findCorsProxy)
+            var assetUrls = [];
             if (challenge.assets && challenge.assets.js) {
-                challenge.assets.js = challenge.assets.js.map(function (url) {
-                    var abs = url.charAt(0) === '/' ? companyBase + url : url;
-                    return corsProxy + abs;
+                assetUrls = challenge.assets.js.map(function (url) {
+                    return url.charAt(0) === '/' ? companyBase + url : url;
                 });
             }
 
@@ -313,16 +353,36 @@ $(function () {
                 });
             }
 
-            if (typeof SBCaptcha !== 'undefined') {
-                initCaptchaWidget();
+            function loadWidget() {
+                if (typeof SBCaptcha !== 'undefined') {
+                    initCaptchaWidget();
+                } else {
+                    var script = document.createElement('script');
+                    script.src = widgetUrl;
+                    script.onload = initCaptchaWidget;
+                    script.onerror = function () {
+                        showAlert('Failed to load captcha widget from: ' + widgetUrl);
+                    };
+                    document.head.appendChild(script);
+                }
+            }
+
+            function applyProxyAndLoad(proxy) {
+                if (proxy && assetUrls.length) {
+                    challenge.assets = { js: assetUrls.map(proxy) };
+                    logApi('CORS proxy selected', { proxied: challenge.assets.js[0] });
+                }
+                loadWidget();
+            }
+
+            if (assetUrls.length) {
+                findCorsProxy(assetUrls[0], applyProxyAndLoad, function () {
+                    logApi('CORS proxies', { note: 'all failed, loading without proxy' });
+                    challenge.assets = { js: assetUrls };
+                    loadWidget();
+                });
             } else {
-                var script = document.createElement('script');
-                script.src = widgetUrl;
-                script.onload = initCaptchaWidget;
-                script.onerror = function () {
-                    showAlert('Failed to load captcha widget from: ' + widgetUrl);
-                };
-                document.head.appendChild(script);
+                loadWidget();
             }
         });
     }
