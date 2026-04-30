@@ -33,9 +33,8 @@ $(function () {
         date:          null,
         time:          null,
         timeMatrix:    null,
-        captchaWidget:  null,
-        captchaToken:   null,
-        assetBlobUrls:  null,
+        captchaWidget: null,
+        captchaToken:  null,
     };
 
     // ─── API log ─────────────────────────────────────────────────────────────
@@ -67,67 +66,6 @@ $(function () {
         $('#card-' + id).addClass('active');
         var top = $('#card-' + id).offset().top - 20;
         $('html, body').animate({ scrollTop: top }, 250);
-    }
-
-    // ─── CORS proxy helpers ───────────────────────────────────────────────────
-
-    var CORS_PROXIES = [
-        function (u) { return 'https://corsproxy.io/?url=' + u; },
-        function (u) { return 'https://test.cors.workers.dev/?' + u; },
-        function (u) { return 'https://api.allorigins.win/raw?url=' + u; },
-function (u) { return 'https://api.cors.lol/?url=' + u; },
-    ];
-
-    function shuffleArray(arr) {
-        var a = arr.slice();
-        for (var i = a.length - 1; i > 0; i--) {
-            var j = Math.floor(Math.random() * (i + 1));
-            var t = a[i]; a[i] = a[j]; a[j] = t;
-        }
-        return a;
-    }
-
-    // Fetch url via CORS proxies in random order, return as blob: URL with JS MIME type.
-    // Blob URL bypasses strict module MIME checking regardless of proxy Content-Type.
-    // onSuccess(blobUrl), onFail(msg)
-    function fetchAsJsBlob(url, onSuccess, onFail) {
-        var proxies = shuffleArray(CORS_PROXIES);
-        var idx = 0;
-
-        function tryNext() {
-            if (idx >= proxies.length) { onFail('All proxies failed for: ' + url); return; }
-            var proxied = proxies[idx++](url);
-            fetch(proxied, { mode: 'cors', cache: 'no-store' })
-                .then(function (r) {
-                    if (!r.ok) { tryNext(); return null; }
-                    return r.text();
-                })
-                .then(function (code) {
-                    if (code === null || code === undefined) { return; }
-                    var blob = new Blob([code], { type: 'application/javascript' });
-                    onSuccess(URL.createObjectURL(blob));
-                })
-                .catch(tryNext);
-        }
-
-        tryNext();
-    }
-
-    // Fetch all urls as JS blobs sequentially, call onDone([blobUrls]) when all done.
-    function fetchAllAsJsBlobs(urls, onDone, onFail) {
-        var blobUrls = [];
-        var remaining = urls.slice();
-
-        function next() {
-            if (!remaining.length) { onDone(blobUrls); return; }
-            var url = remaining.shift();
-            fetchAsJsBlob(url, function (blobUrl) {
-                blobUrls.push(blobUrl);
-                next();
-            }, onFail);
-        }
-
-        next();
     }
 
     // ─── Step 1: Connect ─────────────────────────────────────────────────────
@@ -338,35 +276,28 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         $('#captcha-container').empty();
         $('#captcha-wrap').hide();
+        $('#captcha-loading').hide();
+        $('#captcha-error').hide().text('');
+
+        $('#captcha-wrap').show();
+        $('#captcha-loading').show();
 
         s.apiClient.getCaptchaChallenge(function (challenge) {
             if (!challenge || !challenge.provider) {
                 logApi('getCaptchaChallenge', { provider: null, note: 'captcha disabled' });
+                $('#captcha-wrap').hide();
+                $('#captcha-loading').hide();
                 return;
             }
 
-            // Strip first subdomain: https://user-api.simplybook.me → https://simplybook.me
-            var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
-            var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
-
-            // Collect absolute asset URLs (proxy applied later via findCorsProxy)
-            var assetUrls = [];
-            if (challenge.assets && challenge.assets.js) {
-                assetUrls = challenge.assets.js.map(function (url) {
-                    return url.charAt(0) === '/' ? companyBase + url : url;
-                });
-            }
-
-            // widgetUrl may be missing in JSON-RPC v1 response — construct it
-            var widgetUrl = challenge.widgetUrl || (companyBase + '/v2/js/lib/captcha/captcha-widget.js');
-
-            logApi('getCaptchaChallenge', { provider: challenge.provider, widgetUrl: widgetUrl });
+            logApi('getCaptchaChallenge', { provider: challenge.provider });
 
             function initCaptchaWidget() {
-                $('#captcha-wrap').show();
+                $('#captcha-loading').hide();
                 s.captchaWidget = new SBCaptcha({
                     container: document.getElementById('captcha-container'),
                     challenge:  challenge,
+                    assetBase:  '',
                     onToken:    function (token) {
                         s.captchaToken = token;
                         logApi('captcha onToken', token.substr(0, 40) + '…');
@@ -374,33 +305,17 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
                 });
             }
 
-            function loadWidget() {
-                if (typeof SBCaptcha !== 'undefined') {
-                    initCaptchaWidget();
-                } else {
-                    var script = document.createElement('script');
-                    script.src = widgetUrl;
-                    script.onload = initCaptchaWidget;
-                    script.onerror = function () {
-                        showAlert('Failed to load captcha widget from: ' + widgetUrl);
-                    };
-                    document.head.appendChild(script);
-                }
-            }
-
-            if (assetUrls.length) {
-                fetchAllAsJsBlobs(assetUrls, function (blobUrls) {
-                    s.assetBlobUrls = blobUrls;
-                    challenge.assets = { js: blobUrls };
-                    logApi('assets as blobs', blobUrls.length);
-                    loadWidget();
-                }, function (err) {
-                    logApi('asset fetch failed', { err: err });
-                    challenge.assets = { js: assetUrls };
-                    loadWidget();
-                });
+            if (typeof SBCaptcha !== 'undefined') {
+                initCaptchaWidget();
             } else {
-                loadWidget();
+                var script = document.createElement('script');
+                script.src = 'captcha-widget.js';
+                script.onload = initCaptchaWidget;
+                script.onerror = function () {
+                    $('#captcha-loading').hide();
+                    $('#captcha-error').text('Failed to load captcha widget.').show();
+                };
+                document.head.appendChild(script);
             }
         });
     }
@@ -486,12 +401,12 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         // imagecaptcha: token must be read manually via getToken()
         // all other providers: token already in s.captchaToken via onToken callback
-        if (s.captchaWidget) {
+        if ($('#chk-skip-captcha').is(':checked') || !s.captchaWidget) {
+            finalize(null);
+        } else {
             s.captchaWidget.getToken().then(function (token) {
                 finalize(token || s.captchaToken);
             });
-        } else {
-            finalize(s.captchaToken);
         }
     });
 
@@ -502,9 +417,6 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         s.apiClient.getCaptchaChallenge(function (challenge) {
             if (challenge && challenge.provider) {
-                if (s.assetBlobUrls && s.assetBlobUrls.length) {
-                    challenge.assets = { js: s.assetBlobUrls };
-                }
                 s.captchaWidget.setChallenge(challenge);
             }
         });
