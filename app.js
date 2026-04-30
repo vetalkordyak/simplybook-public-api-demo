@@ -35,6 +35,8 @@ $(function () {
         timeMatrix:    null,
         captchaWidget: null,
         captchaToken:  null,
+        corsProxy:     null,
+        companyBase:   null,
     };
 
     // ─── API log ─────────────────────────────────────────────────────────────
@@ -325,6 +327,7 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
             // Strip first subdomain: https://user-api.em.simplybook.ovh → https://em.simplybook.ovh
             var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
             var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
+            s.companyBase   = companyBase;
 
             // Collect absolute asset URLs (proxy applied later via findCorsProxy)
             var assetUrls = [];
@@ -366,6 +369,7 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
             }
 
             function applyProxyAndLoad(proxy) {
+                s.corsProxy = proxy || null;
                 if (proxy && assetUrls.length) {
                     challenge.assets = { js: assetUrls.map(proxy) };
                     logApi('CORS proxy selected', { proxied: challenge.assets.js[0] });
@@ -482,6 +486,12 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
 
         s.apiClient.getCaptchaChallenge(function (challenge) {
             if (challenge && challenge.provider) {
+                if (s.corsProxy && s.companyBase && challenge.assets && challenge.assets.js) {
+                    challenge.assets.js = challenge.assets.js.map(function (url) {
+                        var abs = url.charAt(0) === '/' ? s.companyBase + url : url;
+                        return s.corsProxy(abs);
+                    });
+                }
                 s.captchaWidget.setChallenge(challenge);
             }
         });
