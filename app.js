@@ -290,7 +290,12 @@ $(function () {
                 return;
             }
 
-            logApi('getCaptchaChallenge', { provider: challenge.provider });
+            // Strip first subdomain: https://user-api.simplybook.me → https://simplybook.me
+            var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
+            var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
+            var widgetUrl   = challenge.widgetUrl || (companyBase + '/v2/js/lib/captcha/captcha-widget.js');
+
+            logApi('getCaptchaChallenge', { provider: challenge.provider, widgetUrl: widgetUrl });
 
             function initCaptchaWidget() {
                 $('#captcha-loading').hide();
@@ -309,7 +314,7 @@ $(function () {
                 initCaptchaWidget();
             } else {
                 var script = document.createElement('script');
-                script.src = 'captcha-widget.js';
+                script.src = widgetUrl;
                 script.onload = initCaptchaWidget;
                 script.onerror = function () {
                     $('#captcha-loading').hide();
