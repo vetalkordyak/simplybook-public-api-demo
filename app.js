@@ -403,37 +403,65 @@ function (u) { return 'https://api.cors.lol/?url=' + u; },
             $('#btn-book').prop('disabled', true)
                 .html('<span class="spinner-border spinner-border-sm me-1"></span>Booking…');
 
-            logApi('book request', {
-                serviceId: s.serviceId, unitId: s.unitId,
-                date: s.date, time: s.time,
-                client: clientData,
-                additional: additional,
-            });
+            function doBook(unitId) {
+                logApi('book request', {
+                    serviceId: s.serviceId, unitId: unitId,
+                    date: s.date, time: s.time,
+                    client: clientData,
+                    additional: additional,
+                });
 
-            s.apiClient.book(
-                s.serviceId,
-                s.unitId,
-                s.date,
-                s.time,
-                clientData,
-                additional,
-                1,    // qty
-                null, // batchId
-                function (result, error) {
-                    if (error || !result || result.error) {
-                        var msg = (error && error.message)
-                            || (result && result.error && result.error.message)
-                            || 'Booking failed.';
-                        showAlert(msg);
-                        $('#btn-book').prop('disabled', false).text('Book Now');
-                        refreshCaptcha();
-                        return;
+                s.apiClient.book(
+                    s.serviceId,
+                    unitId,
+                    s.date,
+                    s.time,
+                    clientData,
+                    additional,
+                    1,    // qty
+                    null, // batchId
+                    function (result, error) {
+                        if (error || !result || result.error) {
+                            var msg = (error && error.message)
+                                || (result && result.error && result.error.message)
+                                || 'Booking failed.';
+                            showAlert(msg);
+                            $('#btn-book').prop('disabled', false).text('Book Now');
+                            refreshCaptcha();
+                            return;
+                        }
+
+                        logApi('book result', result);
+                        showResult(result);
                     }
+                );
+            }
 
-                    logApi('book result', result);
-                    showResult(result);
-                }
-            );
+            if (s.unitId === -1) {
+                // "Any available" — find first provider free at selected time
+                s.apiClient.getCartesianStartTimeMatrix(
+                    s.date, s.date, s.serviceId, null, 1,
+                    function (matrix) {
+                        var pickedUnitId = null;
+                        $.each(matrix || [], function (i, item) {
+                            var slots = (item.timeslots && item.timeslots[s.date]) || [];
+                            if (slots.indexOf(s.time) !== -1) {
+                                pickedUnitId = item.provider_id;
+                                return false; // break
+                            }
+                        });
+                        if (!pickedUnitId) {
+                            showAlert('No available provider for the selected time.');
+                            $('#btn-book').prop('disabled', false).text('Book Now');
+                            return;
+                        }
+                        logApi('auto-selected provider', pickedUnitId);
+                        doBook(pickedUnitId);
+                    }
+                );
+            } else {
+                doBook(s.unitId);
+            }
         };
 
         // imagecaptcha: token must be read manually via getToken()
