@@ -73,7 +73,6 @@ $(function () {
     var CORS_PROXIES = [
         function (u) { return 'https://corsproxy.io/?url=' + u; },
         function (u) { return 'https://test.cors.workers.dev/?' + u; },
-        function (u) { return 'http://alloworigin.com/get?url=' + u; },
         function (u) { return 'https://api.allorigins.win/raw?url=' + u; },
 function (u) { return 'https://api.cors.lol/?url=' + u; },
         function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + u; },
