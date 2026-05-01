@@ -295,6 +295,11 @@ $(function () {
             var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
             var widgetUrl   = challenge.widgetUrl || (companyBase + '/v2/js/lib/captcha/captcha-widget.js');
 
+            // imageUrl from the API is a relative path — resolve it against the API base URL
+            if (challenge.imageUrl && challenge.imageUrl.charAt(0) === '/') {
+                challenge.imageUrl = apiBase + challenge.imageUrl;
+            }
+
             logApi('getCaptchaChallenge', { provider: challenge.provider, widgetUrl: widgetUrl });
 
             function initCaptchaWidget() {
