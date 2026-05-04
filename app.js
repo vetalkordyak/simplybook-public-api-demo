@@ -293,7 +293,7 @@ $(function () {
             var apiBase   = $('#inp-apiurl').val().trim().replace(/\/$/, '');
             var widgetUrl = challenge.widgetUrl;
 
-            // imageUrl from the API is a relative path — resolve it against the API base URL
+            // imageUrl may be a relative path in older API versions — resolve against the API base URL
             if (challenge.imageUrl && challenge.imageUrl.charAt(0) === '/') {
                 challenge.imageUrl = apiBase + challenge.imageUrl;
             }
