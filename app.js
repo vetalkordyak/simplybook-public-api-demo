@@ -290,10 +290,8 @@ $(function () {
                 return;
             }
 
-            // Strip first subdomain: https://user-api.simplybook.me → https://simplybook.me
-            var apiBase     = $('#inp-apiurl').val().trim().replace(/\/$/, '');
-            var companyBase = apiBase.replace(/^(https?:\/\/)[^.]+\./, '$1');
-            var widgetUrl   = challenge.widgetUrl || (companyBase + '/v2/js/lib/captcha/captcha-widget.js');
+            var apiBase   = $('#inp-apiurl').val().trim().replace(/\/$/, '');
+            var widgetUrl = challenge.widgetUrl;
 
             // imageUrl from the API is a relative path — resolve it against the API base URL
             if (challenge.imageUrl && challenge.imageUrl.charAt(0) === '/') {
@@ -307,7 +305,6 @@ $(function () {
                 s.captchaWidget = new SBCaptcha({
                     container: document.getElementById('captcha-container'),
                     challenge:  challenge,
-                    assetBase:  '',
                     onToken:    function (token) {
                         s.captchaToken = token;
                         logApi('captcha onToken', token.substr(0, 40) + '…');
